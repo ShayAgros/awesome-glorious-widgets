@@ -3,160 +3,223 @@ local gears = require('gears')
 local awful = require('awful')
 local naughty = require('naughty')
 local beautiful = require('beautiful')
-
-local filesystem = require('gears.filesystem')
+local filesystem = gears.filesystem
 local config_dir = filesystem.get_configuration_dir()
+local dpi = beautiful.xresources.apply_dpi
+--local widget_icon_dir = config_dir .. 'configuration/user-profile/'
 
-package.cpath = package.cpath .. ";" .. config_dir .. "awesome-glorious-widgets/lockscreen/library/?.so;"
+-- Add paths to package.cpath
+package.cpath = package.cpath .. ';' .. config_dir .. '/library/?.so'
 local pam = require('liblua_pam')
 
-local dpi = beautiful.xresources.apply_dpi
+-- Configuration table
+local config = {
+	-- Fallback Password
+	-- THIS EXIST TO PREVENT THE ERROR CAUSED BY THE DIFFERENCE OF LUA VERSIONS USED ON COMPILING THE LUA_PAM LIB
+	-- READ THE WIKI - ABOUT MODULE SECTION; TO FIX THE LIBRAY ERROR IF YOU HAVE ONE
+	-- ONLY USE THIS AS A TEMPORARY SUBSTITUTE TO LUA_PAM
+	fallback_password = function()
+		-- Set your password here
+		return '123456'
+	end,
 
-local filesystem = require('gears.filesystem')
-local config_dir = filesystem.get_configuration_dir()
-local widget_icon_dir = config_dir .. 'awesome-glorious-widgets/lockscreen/'
+	fakepassword = 'password',
 
--- Configuration
+	-- General Configuration
+	-- Capture a picture using webcam
+	capture_intruder = true,
 
-beautiful.background = '#00000066'
-beautiful.fg_normal = '#f2f2f2EE'
-beautiful.transparent = '#00000000'
-beautiful.system_red_dark = '#EE4F84'
-beautiful.system_green_dark = '#53E2AE'
-beautiful.system_yellow_dark = '#F1FF52'
-beautiful.system_blue_dark = '#6498EF'
+	-- Save location, auto creates
+	face_capture_dir = '/tmp/Intruders/',
 
-local capture_intruder = true  							-- Capture a picture using webcam 
-local face_capture_dir = '${HOME}/Pictures/Intruders/'  -- Save location, auto creates
+	-- Background Mode Configuration
+	-- True to blur the background
+	blur_background = false,
 
-local background_mode = 'blur' 							-- Available background mode: `blur`, `root`, `background`
-local change_background_on_time = true					-- Dynamic background will only work with `blur` mode
+	wallparer_path = '/home/ANT.AMAZON.COM/shayagr/Downloads/wallpapers/the-wisdom-of-the-cheshire-puss-1920×1080.jpg',
+	-- Wallpaper directory
+	wall_dir = '/home/ANT.AMAZON.COM/shayagr/Downloads/wallpapers/',
 
-local wall_dir = gears.filesystem.get_configuration_dir() .. 'awesome-glorious-widgets/lockscreen/wallpapers/'
-local default_wall_name = 'morning-wallpaper.jpg'
+	-- Default wallpaper
+	default_wall_name = 'ice-amp-fire-1920x1080.jpg',
 
--- Useful variables (DO NOT TOUCH)
+	-- /tmp directory
+	tmp_wall_dir = '/tmp/awesomewm/' .. os.getenv('USER') .. '/'
+}
 
-local input_password = nil
+-- Useful variables (DO NOT TOUCH THESE)
+local input_password = ''
 local lock_again = nil
 local type_again = true
-local capture_now = capture_intruder
+local capture_now = config.capture_intruder
+local locked_tag = nil
 
--- Process
+local uname_text = wibox.widget {
+	id = 'uname_text',
+	markup = '$USER',
+	font = 'Inter Bold 12',
+	align = 'center',
+	valign = 'center',
+	widget = wibox.widget.textbox
+}
 
+local caps_text = wibox.widget {
+	id = 'uname_text',
+	markup = 'Caps Lock is on',
+	font = 'Inter Italic 10',
+	align = 'center',
+	valign = 'center',
+	opacity = 0.0,
+	widget = wibox.widget.textbox
+}
+
+local profile_imagebox = wibox.widget {
+	id = 'user_icon',
+	image = config_dir .. 'tux.png',
+	resize = true,
+	forced_height = dpi(120),
+	forced_width = dpi(120),
+	--clip_shape = gears.shape.circle,
+	widget = wibox.widget.imagebox
+}
+
+local time = wibox.widget.textclock(
+	'<span font=\'Inter Bold 56\'>%I:%M %p</span>',
+	1
+)
+
+local wanted_text = wibox.widget {
+	markup = 'INTRUDER ALERT!',
+	font   = 'Inter Bold 12',
+	align  = 'center',
+	valign = 'center',
+	widget = wibox.widget.textbox
+}
+
+local msg_table = {
+	'This incident will be reported.',
+	'We are watching you.',
+	'We know where you live.',
+	'RUN!',
+	'Yamete, Oniichan~ uwu',
+	'This will self-destruct in 5 seconds!',
+	'Image successfully sent!',
+	'You\'re doomed!',
+	'Authentication failed!',
+	'I am watching you.',
+	'I know where you live.',
+	'RUN!',
+	'Your parents must be proud of you'
+}
+
+local wanted_msg = wibox.widget {
+	markup = 'This incident will be reported!',
+	font   = 'Inter Regular 10',
+	align  = 'center',
+	valign = 'center',
+	widget = wibox.widget.textbox
+}
+
+local wanted_image = wibox.widget {
+	image  = config_dir .. 'evil_tux.jpg',
+	resize = true,
+	forced_height = dpi(120),
+	clip_shape = gears.shape.rounded_rect,
+	widget = wibox.widget.imagebox
+}
+
+local date_value = function()
+	local ordinal = nil
+	local date = os.date('%d')
+	local day = os.date('%A')
+	local month = os.date('%B')
+
+	local first_digit = string.sub(date, 0, 1)
+	local last_digit = string.sub(date, -1)
+	if first_digit == '0' then
+	  date = last_digit
+	end
+
+	if last_digit == '1' and date ~= '11' then
+	  ordinal = 'st'
+	elseif last_digit == '2' and date ~= '12' then
+	  ordinal = 'nd'
+	elseif last_digit == '3' and date ~= '13' then
+	  ordinal = 'rd'
+	else
+	  ordinal = 'th'
+	end
+
+	return date .. ordinal .. ' of ' .. month .. ', ' .. day
+end
+
+local date = wibox.widget {
+	markup = date_value(),
+	font = 'Inter Bold 20',
+	align = 'center',
+	valign = 'center',
+	widget = wibox.widget.textbox
+}
+
+local password_box = wibox.widget {
+	markup = "",
+	font = 'Inter Bold 20',
+	align = 'left',
+	valign = 'center',
+	widget = wibox.widget.textbox
+}
+
+local circle_container = wibox.widget {
+	bg = '#E88282',
+	forced_width = dpi(130),
+	forced_height = dpi(130),
+	shape = gears.shape.circle,
+	widget = wibox.container.background,
+	visible = true,
+}
+
+local rounded_rect = function(cr, width, height)
+    return gears.shape.rounded_rect(cr, width, height, 40)
+end
+
+-- Rotation direction table
+local rotation_direction = {'north', 'west', 'south', 'east'}
+
+-- Red, Green, Yellow, Blue
+local red = '#FF0000'
+local green = '#00FF00'
+local yellow = '#BDB76B'
+local blue = '#0000FF'
+
+-- Color table
+local arc_color = {red, green, yellow, blue}
+
+-- Processes
 local locker = function(s)
 
+	print("lockscreen initial setup is initiated")
+
 	local lockscreen = wibox {
+		screen = s,
 		visible = false,
 		ontop = true,
-		type = "splash",
+		type = 'splash',
 		width = s.geometry.width,
 		height = s.geometry.height,
 		bg = beautiful.background,
 		fg = beautiful.fg_normal
 	}
 
-	local uname_text = wibox.widget {
-		id = 'uname_text',
-		markup = '$USER',
-		font = 'SF Pro Display Bold 17',
-		align = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local uname_text_shadow = wibox.widget {
-		id = 'uname_text_shadow',
-		markup = '<span foreground="#00000066">' .. '$USER' .. "</span>",
-		font = 'SF Pro Display Bold 17',
-		align = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local caps_text = wibox.widget {
-		id = 'uname_text',
-		markup = 'Caps Lock is off',
-		font = 'SF Pro Display Italic 10',
-		align = 'center',
-		valign = 'center',
-		opacity = 0.0,
-		widget = wibox.widget.textbox
-	}
-	local caps_text_shadow = wibox.widget {
-		id = 'uname_text',
-		markup = '<span foreground="#00000066">' .. 'Caps Lock is off' .. "</span>",
-		font = 'SF Pro Display Italic 10',
-		align = 'center',
-		valign = 'center',
-		opacity = 0.0,
-		widget = wibox.widget.textbox
-	}
-
 	-- Update username textbox
-	awful.spawn.easy_async_with_shell('whoami | tr -d "\\n"', function(stdout) 
-		uname_text.markup = stdout
-		uname_text_shadow.markup = '<span foreground="#00000066">' .. stdout .. "</span>"
-	end)
-
-
-	local profile_imagebox = wibox.widget {
-		id = 'user_icon',
-		image = widget_icon_dir .. 'user.svg',
-		forced_height = dpi(100),
-		forced_width = dpi(100),
-		clip_shape = gears.shape.circle,
-		widget = wibox.widget.imagebox,
-		resize = true
-	}
-
-	local time = wibox.widget.textclock(
-		'<span font="SF Pro Display Bold 56">%H:%M</span>',
-		1
+	awful.spawn.easy_async_with_shell(
+		"whoami",
+		function(stdout)
+			stdout = stdout:gsub('%\n','')
+			uname_text.markup = stdout
+		end
 	)
-
-	local time_shadow = wibox.widget.textclock(
-		'<span foreground="#00000066" font="SF Pro Display Bold 56">%H:%M</span>',
-		1
-	)
-
-	local wanted_text = wibox.widget {
-		markup = 'INTRUDER ALERT',
-		font   = 'SFNS Pro Text Bold 12',
-		align  = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local msg_table = {
-		'We are watching you.',
-		'We know where you live.',
-		'This incident will be reported.',
-		'RUN!',
-		'Yamete, Oniichan~ uwu',
-		'This will self-destruct in 5 seconds!',
-		'Image successfully sent!',
-		'You\'re doomed!'
-	}
-
-	local wanted_msg = wibox.widget {
-		markup = 'This incident will be reported!',
-		font   = 'SFNS Pro Text Regular 10',
-		align  = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local wanted_image = wibox.widget {
-		image  = widget_icon_dir .. 'user.svg',
-		resize = true,
-		forced_height = dpi(100),
-		clip_shape = gears.shape.rounded_rect,
-	    widget = wibox.widget.imagebox
-	}
 
 	local wanted_poster = awful.popup {
-
 		widget 		   		= {
 			{
 				{
@@ -169,7 +232,7 @@ local locker = function(s)
 						layout = wibox.layout.align.horizontal
 					},
 					wanted_msg,
-					spacing = dpi(10),
+					spacing = dpi(5),
 					layout = wibox.layout.fixed.vertical
 				},
 				margins = dpi(20),
@@ -184,158 +247,51 @@ local locker = function(s)
 		ontop 				= true,
 		shape          		= gears.shape.rectangle,
 		maximum_width  		= dpi(250),
-		maximum_height 		= dpi(200),
-		hide_on_right_click = true,
-		preferred_anchors 	= {'middle'},
+		maximum_height 		= dpi(250),
+		hide_on_right_click = false,
+		preferred_anchors 	= {'top'},
 		visible 	   		= false
-
 	}
 
-	awful.placement.bottom(wanted_poster, 
-		{ 
-			margins = 
-			{
-				bottom = dpi(10),
-			}, 
-			parent = screen.primary
+	-- Place wanted poster at the bottom of primary screen
+	awful.placement.top(
+		wanted_poster,
+		{
+			margins =  {
+				top = dpi(10)
+			}
 		}
 	)
-	
-
-	local date_value = function()
-		local date_val = {}
-		local ordinal = nil
-
-		local day = os.date('%d')
-		local month = os.date('%B')
-
-		local first_digit = string.sub(day, 0, 1) 
-		local last_digit = string.sub(day, -1) 
-
-		if first_digit == '0' then
-		  day = last_digit
-		end
-
-		if last_digit == '1' and day ~= '11' then
-		  ordinal = 'st'
-		elseif last_digit == '2' and day ~= '12' then
-		  ordinal = 'nd'
-		elseif last_digit == '3' and day ~= '13' then
-		  ordinal = 'rd'
-		else
-		  ordinal = 'th'
-		end
-
-		date_val.day = day
-		date_val.month = month
-		date_val.ordinal= ordinal
-
-		return date_val
-	end
-
-
-	local date = wibox.widget {
-		markup = date_value().day .. date_value().ordinal .. ' of ' .. date_value().month,
-		font = 'SF Pro Display Bold 20',
-		align = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local date_shadow = wibox.widget {
-		markup = "<span foreground='#00000066'>" .. date_value().day .. date_value().ordinal .. " of " .. 
-			date_value().month .. "</span>",
-		font = 'SF Pro Display Bold 20',
-		align = 'center',
-		valign = 'center',
-		widget = wibox.widget.textbox
-	}
-
-	local circle_container = wibox.widget {
-		bg = '#f2f2f233',
-	    forced_width = dpi(110),
-	    forced_height = dpi(110),
-	    shape = gears.shape.circle,
-	    widget = wibox.container.background
-	}
-
-	local locker_arc = wibox.widget {
-	    bg = beautiful.transparent,
-	    forced_width = dpi(110),
-	    forced_height = dpi(110),
-	    shape = function(cr, width, height)
-	        gears.shape.arc(cr, width, height, dpi(5), 0, math.pi/2, true, true)
-	    end,
-	    widget = wibox.container.background
-	}
 
 	-- Check Capslock state
-	check_caps = function()
-		awful.spawn.easy_async(config_dir .. 'awesome-glorious-widgets/lockscreen/binary/ccapschecker', function(stdout)
-			
-			status = stdout:gsub('%\n','')
-
-			if status:match('on') then
-				caps_text.opacity = 1.0
-				caps_text_shadow.opacity = 1.0
-
-				caps_text:set_markup('Caps Lock is on')
-				caps_text_shadow:set_markup('<span foreground="#00000066">' .. 'Caps Lock is on' .. "</span>")
-			else
-				caps_text.opacity = 0.0
-				caps_text_shadow.opacity = 0.0
+	local check_caps = function()
+		awful.spawn.easy_async_with_shell(
+			--'xset q | sed -En "s/.*Caps Lock:\s*(on|off).*/\1/p"',
+			'xset q | grep Caps | cut -d: -f3 | cut -d0 -f1 | tr -d \' \'',
+			function(stdout)
+				if stdout:match('on') then
+					caps_text.opacity = 1.0
+				else
+					caps_text.opacity = 0.0
+				end
+				caps_text:emit_signal('widget::redraw_needed')
 			end
-
-			caps_text:emit_signal('widget::redraw_needed')
-			caps_text_shadow:emit_signal('widget::redraw_needed')
-		end)
+		)
 	end
 
-	local rotate_container = wibox.container.rotate()
-
-	local locker_widget = wibox.widget {
-		{
-		    locker_arc,
-		    widget = rotate_container
-		},
-		layout = wibox.layout.fixed.vertical
-	}
-
-	-- Rotation direction table
-	local rotation_direction = {"north", "west", "south", "east"}
-
-	-- Red, Green, Yellow, Blue
-	local red = beautiful.system_red_dark
-	local green = beautiful.system_green_dark
-	local yellow = beautiful.system_yellow_dark
-	local blue = beautiful.system_blue_dark
-	
-	-- Color table
-	local arc_color = {red, green, yellow, blue}
-
-
-	local locker_widget_rotate = function()
+	-- Rotate the color arc on random direction
+	local locker_arc_rotate = function()
 
 		local direction = rotation_direction[math.random(#rotation_direction)]
 		local color = arc_color[math.random(#arc_color)]
-
-		rotate_container.direction = direction
-
-		locker_arc.bg = color
-
-		rotate_container:emit_signal("widget:redraw_needed")
-		locker_arc:emit_signal("widget::redraw_needed")
-		locker_widget:emit_signal("widget::redraw_needed")
-
 	end
 
+	-- Check webcam
 	local check_webcam = function()
 		awful.spawn.easy_async_with_shell(
-			[[
-			ls -l /dev/video* | grep /dev/video0
-			]],
+			'ls /dev/video0',
 			function(stdout)
-				if not capture_intruder then
+				if not config.capture_intruder then
 					capture_now = false
 					return
 				end
@@ -350,52 +306,54 @@ local locker = function(s)
 	end
 
 	check_webcam()
-
+	-- Snap an image of the intruder
 	local intruder_capture = function()
 		local capture_image = [[
+		save_dir="]] .. config.face_capture_dir .. [["
+		date="$(date +%Y%m%d_%H%M%S)"
+		file_loc="${save_dir}SUSPECT-${date}.png"
 
-		save_dir=]] .. face_capture_dir .. [[
-		date=$(date +%Y%m%d_%H%M%S)
-		file_loc=${save_dir}SUSPECT-${date}.png
-
-		if [ ! -d $save_dir ]; then
-			mkdir -p $save_dir;
+		if [ ! -d "$save_dir" ]; then
+			mkdir -p "$save_dir";
 		fi
 
-		ffmpeg -f video4linux2 -s 800x600 -i /dev/video0 -ss 0:0:2 -frames 1 ${file_loc}
+		if which > /dev/null 2>&1 ; then
+			ffmpeg -f video4linux2 -s 800x600 -i /dev/video0 -ss 0:0:2 -frames 1 "${file_loc}"
 
-		canberra-gtk-play -i camera-shutter &
-		echo ${file_loc}
+			canberra-gtk-play -i camera-shutter &
+			echo "${file_loc}"
 
+		else
+			echo "/home/ANT.AMAZON.COM/shayagr/.config/awesome/evil_tux.jpg"
+		fi
 		]]
 
 		-- Capture the filthy intruder face
 		awful.spawn.easy_async_with_shell(
-			capture_image, 
+			capture_image,
 			function(stdout)
-				circle_container.bg = beautiful.groups_title_bg
-				type_again = true
-					
+
 				-- Humiliate the intruder by showing his/her hideous face
 				wanted_image:set_image(stdout:gsub('%\n',''))
-				wanted_poster.visible= true
 				wanted_msg:set_markup(msg_table[math.random(#msg_table)])
+				wanted_poster.visible= true
 
-				awful.placement.bottom(wanted_poster, 
-					{ 
-						margins = 
-						{
-							bottom = dpi(10),
-						}, 
-						parent = screen.primary
+				awful.placement.top(
+					wanted_poster,
+					{
+						margins = {
+							top = dpi(10)
+						}
 					}
 				)
 
 				wanted_image:emit_signal('widget::redraw_needed')
+				type_again = true
 			end
 		)
 	end
 
+	-- Login failed
 	local stoprightthereyoucriminalscum = function()
 
 		circle_container.bg = red .. 'AA'
@@ -403,75 +361,114 @@ local locker = function(s)
 		if capture_now then
 			intruder_capture()
 		else
-			gears.timer.start_new(1, function()
-				circle_container.bg = beautiful.groups_title_bg
-				type_again = true
-			end)
+			gears.timer.start_new(
+				1,
+				function()
+					circle_container.bg = beautiful.groups_title_bg
+					type_again = true
+				end
+			)
 		end
+
+		input_password = ''
+		password_box.markup = ''
 	end
 
-
+	-- Login successful
 	local generalkenobi_ohhellothere = function()
-		
+
 		circle_container.bg = green .. 'AA'
 
 		-- Add a little delay before unlocking completely
-		gears.timer.start_new(1, function()
-
-			-- Hide all the lockscreen on all screen
-			for s in screen do
-				if s.index == 1 then
-					s.lockscreen.visible = false
-				else
-					s.lockscreen_extended.visible = false
+		gears.timer.start_new(
+			1,
+			function()
+				if capture_now then
+					-- Hide wanted poster
+					wanted_poster.visible = false
 				end
+
+				-- Select old tag
+				-- And restore minimized focused client if there's any
+				if locked_tag then
+					locked_tag.selected = true
+					locked_tag = nil
+				end
+
+				local c = awful.client.restore()
+				if c then
+					client.focus = c
+					c:raise()
+				end
+
+				-- Hide all the lockscreen on all screen
+				for s in screen do
+					if s.index == 1 then
+						s.lockscreen.visible = false
+					else
+						s.lockscreen_extended.visible = false
+					end
+				end
+
+				circle_container.bg = beautiful.groups_title_bg
+
+				-- Enable locking again
+				lock_again = true
+
+				-- Enable validation again
+				type_again = true
 			end
+		)
 
-			circle_container.bg = beautiful.groups_title_bg
-			
-			-- Enable locking again
-			lock_again = true
-
-			-- Enable validation again
-			type_again = true
-
-			if capture_now then
-				-- Hide wanted poster
-				wanted_poster.visible = false
-
-			end
-		end)
-
+		input_password = ''
+		password_box.markup = ''
 	end
 
 	-- A backdoor
+	-- Sometimes I'm too lazy to type so I decided to create this
+	-- Sometimes my genius is... it's almost frightening
 	local back_door = function()
 		generalkenobi_ohhellothere()
 	end
 
+	-- Check module if valid
+	local module_check = function(name)
+		if package.loaded[name] then
+			return true
+		else
+			for _, searcher in ipairs(package.searchers or package.loaders) do
+				local loader = searcher(name)
+				if type(loader) == 'function' then
+					package.preload[name] = loader
+					return true
+				end
+			end
+			return false
+		end
+	end
+
+	-- Password/key grabber
 	local password_grabber = awful.keygrabber {
-		auto_start          = true,
+		autostart          = false,
 		stop_event          = 'release',
 		mask_event_callback = true,
-	    keybindings = {
-	        awful.key {
-	            modifiers = {'Control'},
-	            key       = 'u',
-	            on_press  = function() 
-	            	input_password = nil
+		keybindings = {
+			{{'Control', }, 'u', function(self)
+					input_password = ''
+					password_box.markup = ''
+			end},
 
-	            end
-	        },
-	        awful.key {
-	            modifiers = {'Mod1', 'Mod4', 'Shift', 'Control'},
-	            key       = 'Return',
-	            on_press  = function(self) 
-	            	self:stop()
-	            	back_door() 
-	        	end
-	        }
-	    },
-		keypressed_callback = function(self, mod, key, command) 
+			{{'Mod4', 'Shift' }, 'Return', function(self)
+					if not type_again then
+						return
+					end
+					self:stop()
+
+					-- Call backdoor
+					back_door()
+			end},
+		},
+		keypressed_callback = function(self, mod, key, command)
 
 			if not type_again then
 				return
@@ -479,31 +476,34 @@ local locker = function(s)
 
 			-- Clear input string
 			if key == 'Escape' then
+				input_password = ''
+				password_box.markup = ''
+
+			elseif key == 'BackSpace' then
 				-- Clear input threshold
-				input_password = nil
-			end
+				if input_password and string.len(input_password) > 0 then
+					input_password = string.sub(input_password, 0, string.len(input_password) - 1)
+				end
 
 			-- Accept only the single charactered key
-			-- Ignore 'Shift', 'Control', 'Return', 'F1', 'F2', etc., etc
-			if #key == 1 then
-				
-				locker_widget_rotate()
+			-- Ignore 'Shift', 'Control', 'Return', 'F1', 'F2', etc., etc.
+			elseif #key == 1 then
 
-				if input_password == nil then
-					input_password = key
-					return
-				end
-				
 				input_password = input_password .. key
+
+			end
+
+			if string.len(input_password) <= string.len(config.fakepassword) then
+				password_box.markup = string.sub(config.fakepassword, 0, string.len(input_password))
+				--password_box.markup = input_password
 			end
 
 		end,
 		keyreleased_callback = function(self, mod, key, command)
-			locker_arc.bg = beautiful.transparent
-			locker_arc:emit_signal('widget::redraw_needed')
 
 			if key == 'Caps_Lock' then
 				check_caps()
+				return
 			end
 
 			if not type_again then
@@ -513,11 +513,54 @@ local locker = function(s)
 			-- Validation
 			if key == 'Return' then
 
-				type_again = false
-
 				-- Validate password
-				local pam_auth = pam:auth_current_user(input_password)
-				if pam_auth then
+				local authenticated = false
+				if input_password ~= '' then
+					-- If lua-pam library is 'okay'
+					if module_check('liblua_pam') then
+						--local pam = require('liblua_pam')
+						authenticated = pam:auth_current_user(input_password)
+					else
+						-- Library doesn't exist or returns an error due to some reasons (read the manual)
+						-- Use fallback password data
+						authenticated = input_password == config.fallback_password()
+
+						local rtfm = naughty.action {
+							name = 'Read Manual',
+							   icon_only = false
+						}
+
+						local dismiss = naughty.action {
+							name = 'Dismiss',
+							   icon_only = false
+						}
+
+						rtfm:connect_signal(
+							'invoked',
+							function()
+								awful.spawn(
+									[[sh -c "
+									xdg-open 'https://github.com/manilarome/the-glorious-dotfiles/wiki/About-Modules#lockscreen-module'
+									"]],
+									false
+								)
+							end
+						)
+
+						naughty.notification({
+							app_name = 'Security',
+							title = 'WARNING',
+							message = 'You\'re using the fallback password! It\'s better if you fix the library error.',
+							urgency = 'critical',
+							actions = { rtfm, dismiss }
+						})
+						--naughty.notify({ preset = naughty.config.presets.critical,
+										 --title = "Oops, an error happened!",
+										 --text = 'You\'re using the fallback password! It\'s better if you fix the library error.' })
+					end
+				end
+
+				if authenticated then
 					-- Come in!
 					self:stop()
 					generalkenobi_ohhellothere()
@@ -526,103 +569,78 @@ local locker = function(s)
 					stoprightthereyoucriminalscum()
 				end
 
-				input_password = nil
+				-- Allow typing again and empty password container
+				type_again = false
 			end
-		
+
 		end
 
 	}
 
-
 	lockscreen : setup {
-		layout = wibox.layout.align.vertical,
-		expand = 'none',
-		nil,
+		layout = wibox.container.place,
+		halign = "center",
+		valign = "top",
 		{
-			layout = wibox.layout.align.horizontal,
+			layout = wibox.layout.fixed.vertical,
 			expand = 'none',
-			nil,
+			spacing = dpi(20),
+			{
+				time,
+				date,
+				layout = wibox.layout.fixed.vertical
+			},
 			{
 				layout = wibox.layout.fixed.vertical,
-				expand = 'none',
-				spacing = dpi(20),
 				{
+					layout = wibox.layout.align.horizontal,
 					{
-						layout = wibox.layout.align.horizontal,
-						expand = 'none',
-						nil,
-						{
-							time_shadow,
-							time,
-							vertical_offset = dpi(-1),
-							widget = wibox.layout.stack
-						},
-						nil
-
+						markup = 'password: ',
+						font = 'Inter Bold 20',
+						align = 'center',
+						valign = 'center',
+						widget = wibox.widget.textbox
 					},
-					{
-						layout = wibox.layout.align.horizontal,
-						expand = 'none',
-						nil,
-						{
-							date_shadow,
-							date,
-							vertical_offset = dpi(-1),
-							widget = wibox.layout.stack
-						},
-						nil
 
-					},
-					expand = 'none',
-					layout = wibox.layout.fixed.vertical
-				},
-				{
-					layout = wibox.layout.fixed.vertical,
+					--profile_imagebox,
 					{
-						circle_container,
-						locker_widget,
+						layout = wibox.container.margin,
+						left = 0,
+						right = 2,
+						top = 15,
+						bottom = 15,
 						{
-							layout = wibox.layout.align.vertical,
-							expand = 'none',
-							nil,
+							layout = wibox.container.background,
+							--bg = '#ff0000',
+							shape_border_color = '#838383ff',
+							--shape_border_width = 2,
+							shape_border_width = 0,
+							shape = rounded_rect,
 							{
-								layout = wibox.layout.align.horizontal,
-								expand = 'none',
-								nil,
-								profile_imagebox,
-								nil
+								layout = wibox.container.margin,
+								left = 10,
+								right = 3,
+								top = 1,
+								bottom = 1,
+								password_box,
 							},
-							nil,
 						},
-						layout = wibox.layout.stack
 					},
-					{
-						uname_text_shadow,
-						uname_text,
-						vertical_offset = dpi(-1),
-						widget = wibox.layout.stack
-					},
-					{
-						caps_text_shadow,
-						caps_text,
-						vertical_offset = dpi(-1),
-						widget = wibox.layout.stack
-					}
+					nil,
 				},
+				nil,
+				--uname_text,
+				--caps_text
 			},
-			nil
 		},
-		nil
 	}
 
-	show_lockscreen = function()
+	local show_lockscreen = function()
 
 		-- Why is there a lock_again variable?
-		-- Well, it fixes a bug.
-		-- What is the bug? 
-		-- It's a secret.
-
-		if lock_again == true or lock_again == nil then		
+		-- It prevents the user to spam locking while in a process of authentication
+		-- Prevents a potential bug/problem
+		if lock_again == true or lock_again == nil then
 
 			-- Check capslock status
 			check_caps()
@@ -639,24 +657,61 @@ local locker = function(s)
 				end
 			end
 
-			-- Start key grabbing for password
-			password_grabber:start()
+			-- Start keygrabbing, but with a little delay to
+			-- give some extra time for the free_keygrab function
+			gears.timer.start_new(
+				0.5,
+				function()
+					-- Start key grabbing for password
+					password_grabber:start()
+				end
+			)
 
 			-- Dont lock again
 			lock_again = false
-
 		end
-
 	end
 
+	local free_keygrab = function()
+
+		-- Check if there's a keygrabbing instance
+		-- If yes, stop it
+		local keygrabbing_instance = awful.keygrabber.current_instance
+		if keygrabbing_instance then
+			keygrabbing_instance:stop()
+		end
+
+		-- Unselect all tags and minimize the focused client
+		-- These will also fix the problem with virtualbox or
+		-- any other program that has keygrabbing enabled
+		if client.focus then
+			client.focus.minimized = true
+		end
+		for _, t in ipairs(mouse.screen.selected_tags) do
+			locked_tag = t
+			t.selected = false
+		end
+	end
+
+	awesome.connect_signal(
+		'module::lockscreen_show',
+		function()
+			if lock_again == true or lock_again == nil then
+				-- Stop all current keygrabbing events
+				free_keygrab()
+
+				-- Show lockscreen
+				show_lockscreen()
+			end
+		end
+	)
 	return lockscreen
-
 end
-
 
 -- This lockscreen is for the extra/multi monitor
 local locker_ext = function(s)
 	local extended_lockscreen = wibox {
+		screen = s,
 		visible = false,
 		ontop = true,
 		ontype = 'true',
@@ -671,257 +726,165 @@ local locker_ext = function(s)
 	return extended_lockscreen
 end
 
-
--- Create a lockscreen for each screen
-screen.connect_signal("request::desktop_decoration", function(s)
-
+-- Create lockscreen for each screen
+local create_lock_screens = function(s)
+	print("called to initiate screen ix:", s.index)
 	if s.index == 1 then
 		s.lockscreen = locker(s)
 	else
 		s.lockscreen_extended = locker_ext(s)
 	end
+end
 
-end)
-
--- Dont show notification popups if the screen is locked
-naughty.connect_signal("request::display", function(_)
+-- Don't show notification popups if the screen is locked
+local check_lockscreen_visibility = function()
 	focused = awful.screen.focused()
-	if (focused.lockscreen and focused.lockscreen.visible) or 
-		(focused.lockscreen_extended and focused.lockscreen_extended.visible) then
-		naughty.destroy_all_notifications()
+	if focused.lockscreen and focused.lockscreen.visible then
+		return true
 	end
-end)
+	if focused.lockscreen_extended and focused.lockscreen_extended.visible then
+		return true
+	end
+	return false
+end
 
+-- Notifications signal
+--naughty.connect_signal(
+	--'request::display',
+	--function(_)
+		--if check_lockscreen_visibility() then
+			--naughty.destroy_all_notifications(nil, 1)
+		--end
+	--end
+--)
 
+-- Filter background image
+local filter_bg_image = function(wall_name, index, ap, width, height)
 
--- Blurred background
--- Depends:
--- 		imagemagick
+	-- Checks if the blur has to be blurred
+	local blur_filter_param = ''
+	if config.blur_background then
+		blur_filter_param = '-filter Gaussian -blur 0x10'
+	end
 
--- Temp dir
-local tmp_wall_dir = '/tmp/awesomewm/' .. os.getenv('USER') .. '/'
-
-
--- Imagemagick convert command that will crop, resize and blur the background image
-local return_cmd_str_to_blur = function(wall_name, index, ap, width, height)
+	-- Create imagemagick command
 	local magic = [[
+	sh -c "
+	if [ ! -d ]] .. config.tmp_wall_dir ..[[ ]; then mkdir -p ]] .. config.tmp_wall_dir .. [[; fi
 
-	if [ ! -d ]] .. tmp_wall_dir ..[[ ]; then mkdir -p ]] .. tmp_wall_dir .. [[; fi
+	convert -quality 100 ]] .. ' '  .. blur_filter_param .. ' '.. config.wallparer_path ..
+	[[ -gravity center -crop ]] .. ap .. [[:1 +repage -resize ]] .. width .. 'x' .. height ..
+	[[! ]] .. config.tmp_wall_dir .. index .. wall_name .. [[
+	"]]
 
-	convert -quality 100 -filter Gaussian -blur 0x10 ]] .. wall_dir .. wall_name .. 
-	[[ -gravity center -crop ]] .. ap .. [[:1 +repage -resize ]] .. width .. 'x' .. height .. 
-	[[! ]] .. tmp_wall_dir .. index .. wall_name .. [[
-	]]
 	return magic
 end
 
+-- Apply lockscreen background image
+local apply_ls_bg_image = function(s, wall_name)
+	-- Iterate through all the screens and create a lockscreen for each of it
+	local index = s.index .. '-'
 
--- Set the data
-local update_ls_bg = function(wall_name)
+	-- Get screen geometry
+	--local screen_width = s.geometry.width
+	--local screen_height = s.geometry.height
+	local screen_width = s.geometry.width
+	local screen_height = s.geometry.height
 
-	for s in screen do
+	-- Get the right resolution/aspect ratio that will be use as the background
+	-- TODO: At least until you figure out how to stretch the image, make sure
+	-- the aspect ration is always this. Otherwise images get cropped
+	--local aspect_ratio = screen_width / screen_height
+	local aspect_ratio = 1920 / 1080
+	aspect_ratio = math.floor(aspect_ratio * 100) / 100
 
-		local index = s.index .. '-'
+	-- Create image filter command
+	local cmd = nil
+	cmd = filter_bg_image(wall_name, index, aspect_ratio, screen_width, screen_height)
 
-		local screen_width = s.geometry.width
-		local screen_height = s.geometry.height
+	-- Asign lockscreen to each screen
+	if s.index == 1 then
+		-- Primary screen
+		awful.spawn.easy_async_with_shell(
+			cmd,
+			function()
+				s.lockscreen.bgimage = config.tmp_wall_dir .. index .. wall_name
 
-		local aspect_ratio = screen_width / screen_height
-
-		aspect_ratio = math.floor(aspect_ratio * 100) / 100
-
-		local cmd = return_cmd_str_to_blur(wall_name, index, aspect_ratio, screen_width, screen_height)
-
-		if s.index == 1 then
-			awful.spawn.easy_async_with_shell(cmd, function(stdout, stderr)
-				s.lockscreen.bgimage = tmp_wall_dir .. index .. wall_name
-			end)
-		else
-			awful.spawn.easy_async_with_shell(cmd, function() 
-				s.lockscreen_extended.bgimage = tmp_wall_dir .. index .. wall_name
-			end)
-		end
-
+				--for key, value in pairs(s.lockscreen) do
+					--print('\t', key, value)
+				--end
+			end
+		)
+	else
+		-- Multihead screen/s
+		awful.spawn.easy_async_with_shell(
+			cmd,
+			function()
+				s.lockscreen_extended.bgimage = config.tmp_wall_dir .. index .. wall_name
+			end
+		)
 	end
 end
 
-if background_mode == 'blur'  then
+--awful.screen.connect_for_each_screen(function(s)
+		--create_lock_screens(s)
+		--apply_ls_bg_image(s, config.default_wall_name)
+--end)
 
-	if not change_background_on_time then
-		update_ls_bg(default_wall_name)
-		return 
-	end
-
-	-- Wallpapers filename
-	-- Note:
-	-- Default image format is jpg
-	ls_bg_morning = 'morning-wallpaper.jpg'
-	ls_bg_noon = 'noon-wallpaper.jpg'
-	ls_bg_night = 'night-wallpaper.jpg'
-	ls_bg_midnight = 'midnight-wallpaper.jpg'
-
-	-- Change the wallpaper on scheduled time
-	morning_schedule = '06:22:00'
-	noon_schedule = '12:00:00'
-	night_schedule = '17:58:00'
-	midnight_schedule = '24:00:00'
-
-	local bg_data = {}
-	local the_countdown = nil
-
-	-- Get current time
-	local current_time = function()
-	  	return os.date("%H:%M:%S")
-	end
-
-	-- Parse HH:MM:SS to seconds
-	local parse_to_seconds = function(time)
-
-	  	-- Convert HH in HH:MM:SS
-	  	hour_sec = tonumber(string.sub(time, 1, 2)) * 3600
-
-	  	-- Convert MM in HH:MM:SS
-	  	min_sec = tonumber(string.sub(time, 4, 5)) * 60
-
-		-- Get SS in HH:MM:SS
-		get_sec = tonumber(string.sub(time, 7, 8))
-
-		-- Return computed seconds
-	    return (hour_sec + min_sec + get_sec)
-
-	end
-
-
-	-- Get time difference
-	local time_diff = function(current, schedule)
-		local diff = parse_to_seconds(current) - parse_to_seconds(schedule)
-		return diff
-	end
-
-
-	-- Updates variables
-	local manage_timer = function()
-
-		-- Get current time
-		local time_now = parse_to_seconds(current_time())
-
-		-- Parse the schedules to seconds
-		local parsed_morning = parse_to_seconds(morning_schedule)
-		local parsed_noon = parse_to_seconds(noon_schedule)
-		local parsed_night = parse_to_seconds(night_schedule)
-		local parsed_midnight = parse_to_seconds('00:00:00')
-
-		-- Note that we will use '00:00:00' instead of '24:00:00' as midnight
-		-- As the latter causes an error. The time_diff() returns a negative value
-
-		if time_now >= parsed_midnight and time_now < parsed_morning then
-			-- Midnight time
-
-			-- Update lockscreen background
-			update_ls_bg(ls_bg_midnight)
-
-			-- Set the data for the next scheduled time
-			bg_data = {morning_schedule, ls_bg_morning}
-
-		elseif time_now >= parsed_morning and time_now < parsed_noon then
-			-- Morning time
-
-			-- Update lockscreen background
-			update_ls_bg(ls_bg_morning)
-
-			-- Set the data for the next scheduled time
-			bg_data = {noon_schedule, ls_bg_noon}
-
-		elseif time_now >= parsed_noon and time_now < parsed_night then
-			-- Noon time
-
-			-- Update lockscreen background
-			update_ls_bg(ls_bg_noon)
-
-			-- Set the data for the next scheduled time
-			bg_data = {night_schedule, ls_bg_night}
-
-		else
-			-- Night time
-
-			-- Update lockscreen background
-			update_ls_bg(ls_bg_night)
-
-			-- Set the data for the next scheduled time
-			bg_data = {midnight_schedule, ls_bg_midnight}
-
+-- Create a lockscreen and its background for each screen on start-up
+screen.connect_signal(
+	'request::desktop_decoration',
+	function(s)
+		--naughty.notify({ preset = naughty.config.presets.critical,
+						 --title = "desktop added",
+						 --text = 'desktop_decoration called' })
+		-- bug fix, this signal might be called only for some screens.
+		-- Reinitialize all screens to be on the safe side
+		for s in screen do
+			create_lock_screens(s)
+			apply_ls_bg_image(s, config.default_wall_name)
 		end
-	  
-		
-		-- Get the time difference to set as timeout for the wall_updater timer below
-		the_countdown = time_diff(bg_data[1], current_time())
-
 	end
+)
 
-	-- Update lockscreen background
-	manage_timer()
-
-
-	local ls_updater = gears.timer {
-		-- The timeout is the difference of current time and the scheduled time we set above.
-		timeout   = the_countdown,
-		autostart = true,
-		call_now = true,
-		callback  = function()
-
-			-- Emit signal to update lockscreen background
-	    	awesome.emit_signal("module::lockscreen_background")
-	  	
-	  	end
-	}
-
-	-- Update lockscreen bg here and update the timeout for the next schedule
-	awesome.connect_signal("module::lockscreen_background", function()
-		
-		-- Update values for the next specified schedule
-		manage_timer()
-
-		-- Update timer timeout for the next specified schedule
-		ls_updater.timeout = the_countdown
-
-		-- Restart timer
-		ls_updater:again()
-
-	end)
-
-	-- If a screen is added, execute manage_timer()
-	screen.connect_signal(
-		'added', 
-		function() 
-			manage_timer()
-		end
-	)
-
-elseif background_mode == 'root' then
-
-	for s in screen do
-		if s.index == 1 then
-			s.lockscreen.bgimage = root.wallpaper()
-		else
-			s.lockscreen_extended.bgimage = root.wallpaper()
+-- Regenerate lockscreens and its background if a screen was added to avoid errors
+screen.connect_signal(
+	'added',
+	function(s)
+		print("added signal called")
+		--naughty.notify({ preset = naughty.config.presets.critical,
+						 --title = "desktop added",
+						 --text = 'added signal called' })
+		-- bug fix, this signal might be called only for some screens.
+		-- Reinitialize all screens to be on the safe side
+		for s in screen do
+			create_lock_screens(s)
+			apply_ls_bg_image(s, config.default_wall_name)
 		end
 	end
 
+)
 
-elseif background_mode == 'background' then
-	for s in screen do
-		if s.index == 1 then
-			s.lockscreen.bgimage = beautiful.background
-		else
-			s.lockscreen_extended.bgimage = beautiful.background
-		end
-	end
-else
-	for s in screen do
-		if s.index == 1 then
-			s.lockscreen.bgimage = root.wallpaper()
-		else
-			s.lockscreen_extended.bgimage = root.wallpaper()
-		end
-	end
+function configure_lockscreen(s)
+			create_lock_screens(s)
+			apply_ls_bg_image(s, config.default_wall_name)
 end
+
+-- Regenerate lockscreens and its background if a screen was removed to avoid errors
+screen.connect_signal(
+	'removed',
+	function(s)
+		--naughty.notify({ preset = naughty.config.presets.critical,
+						 --title = "desktop removed",
+						 --text = 'removed signal called' })
+		print("removed signal called")
+		for s in screen do
+			create_lock_screens(s)
+			apply_ls_bg_image(s, config.default_wall_name)
+		end
+		--create_lock_screens(s)
+		--apply_ls_bg_image(config.default_wall_name)
+	end
+)
+
+return configure_lockscreen
